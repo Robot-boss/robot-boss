@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <title>新增王</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    .tag {
+      display:inline-flex;
+      align-items:center;
+      padding:6px 10px;
+      margin:4px;
+      border-radius:6px;
+      font-size:14px;
+      font-weight:bold;
+    }
+    .tag.blue { background:#1e6bff; color:#fff; border:2px solid #4da3ff; }
+    .tag.orange { background:#ff7a00; color:#fff; border:2px solid #ffb060; }
+    .tag .remove { margin-left:8px; cursor:pointer; background: rgba(0,0,0,0.12); padding:2px 6px; border-radius:12px; }
+
+    .time-buttons { margin-top:8px; display:flex; gap:8px; align-items:center; }
+    .time-buttons button { cursor:pointer; padding:8px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:#3a2a1e; color:#fff; }
+    .time-buttons .danger { background:#7a2b1b; border-color:#5b1b12; }
+
+    .image-preview { max-height:140px; display:block; margin-top:8px; }
+
+    .weekline { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; }
+    .weekline label { display:flex; align-items:center; gap:6px; padding:6px 10px; background:#2f220f; border:1px solid #6b4b2a; border-radius:6px; cursor:pointer; }
+
+    .type-line { display:flex; gap:20px; align-items:center; margin-top:8px; }
+    .hms select { width:auto; padding:6px; margin-right:6px; }
+  </style>
+</head>
+
+<body>
+
+<div class="topbar">
+  <div class="container">
+    <h1>新增王表資料</h1>
+    <a href="/" class="btn small">回到列表</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="main">
+
+    <!-- 🔥 已移除匯入預設區 -->
+
+    <form action="/create" method="post" enctype="multipart/form-data">
+
+      <!-- 王名 -->
+      <label>正式王名</label>
+      <input type="text" name="name" required>
+
+      <!-- 補充說明 -->
+      <label>補充說明</label>
+      <input type="text" name="desc">
+
+      <!-- TAG -->
+      <label>簡稱（Enter 或＋加入，可拖曳排序）</label>
+      <div id="tags_box" class="tags-box" style="min-height:46px;"></div>
+      <div style="margin-top:8px; display:flex; gap:8px;">
+        <input id="shortname_input" type="text" placeholder="輸入簡稱按 Enter 或 +">
+        <button type="button" class="btn small" onclick="addTagFromInput()">＋</button>
+      </div>
+      <input type="hidden" name="shortname" id="shortname_hidden">
+
+      <!-- 重生星期 -->
+      <label style="margin-top:16px;">重生星期</label>
+      <div class="weekline">
+        {% for day in ['日','一','二','三','四','五','六'] %}
+        <label>
+          <input type="checkbox" name="weekday" value="{{ loop.index0 }}">
+          {{ day }}
+        </label>
+        {% endfor %}
+      </div>
+
+      <!-- 類型 -->
+      <label style="margin-top:16px;">首領類型</label>
+      <div class="type-line">
+        <label><input type="radio" name="respawn_type" value="cycle" checked onclick="switchType()"> 週期首領</label>
+        <label><input type="radio" name="respawn_type" value="fixed" onclick="switchType()"> 固定首領</label>
+      </div>
+
+      <!-- 週期 -->
+      <div id="cycle-section" style="margin-top:12px;">
+        <label>重生週期（時｜分｜秒）</label>
+        <div class="hms">
+          <select name="respawn_h">
+            {% for i in range(0,24) %}<option value="{{ i }}">{{ '%02d' % i }}</option>{% endfor %}
+          </select> :
+          <select name="respawn_m">
+            {% for i in range(0,60) %}<option value="{{ i }}">{{ '%02d' % i }}</option>{% endfor %}
+          </select> :
+          <select name="respawn_s">
+            {% for i in range(0,60) %}<option value="{{ i }}">{{ '%02d' % i }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- 固定 -->
+      <div id="fixed-section" style="margin-top:16px; display:none;">
+        <label>固定重生時間</label>
+
+        <div class="time-buttons">
+          <button type="button" onclick="addFixedTime()">⏰ 增加時間</button>
+          <button type="button" onclick="copyFixedTimes()">🔁 重複設定</button>
+          <button type="button" class="danger" onclick="clearFixedTimes()">🗑 全部移除</button>
+        </div>
+
+        <div class="hms" style="margin-top:10px;">
+          <select id="fixed_h">
+            {% for i in range(0,24) %}<option value="{{ '%02d' % i }}">{{ '%02d' % i }}</option>{% endfor %}
+          </select>
+          <select id="fixed_m">
+            {% for i in range(0,60) %}<option value="{{ '%02d' % i }}">{{ '%02d' % i }}</option>{% endfor %}
+          </select>
+          <select id="fixed_s">
+            {% for i in range(0,60) %}<option value="{{ '%02d' % i }}">{{ '%02d' % i }}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div id="fixed-time-list" class="tags-box" style="margin-top:12px; min-height:48px;"></div>
+        <input type="hidden" name="fixed_times" id="fixed_times_hidden">
+      </div>
+
+      <!-- 圖片 -->
+      <label style="margin-top:18px;">圖片</label>
+      <input type="file" accept="image/*" name="img_upload" onchange="previewFile(this)">
+      <input type="text" name="img" placeholder="或貼上圖片網址 (http...)">
+      <img id="img_preview" class="image-preview" style="display:none;">
+
+      <div style="margin-top:18px;">
+        <button class="btn" type="submit">新增</button>
+        <a class="btn small" href="/" style="margin-left:8px;">取消</a>
+      </div>
+
+    </form>
+
+  </div>
+</div>
+
+
+<script>
+/* =============================
+   TAG 系統
+============================= */
+const tagsBox=document.getElementById("tags_box");
+const shortInput=document.getElementById("shortname_input");
+const shortHidden=document.getElementById("shortname_hidden");
+let dragItem=null;
+
+shortInput.addEventListener("keydown",e=>{
+  if(e.key==="Enter"){ e.preventDefault(); addTagFromInput(); }
+});
+
+function addTagFromInput(){
+  const v=shortInput.value.trim();
+  if(!v) return;
+  const exist=[...tagsBox.querySelectorAll(".tag.blue")].map(t=>t.dataset.value);
+  if(exist.includes(v)){ shortInput.value=""; return; }
+
+  const span=document.createElement("span");
+  span.className="tag blue";
+  span.dataset.value=v;
+  span.draggable=true;
+  span.innerHTML=`${v} <span class="remove" onclick="removeTagElement(this)">&times;</span>`;
+  span.addEventListener("dragstart",()=>dragItem=span);
+  span.addEventListener("dragover",e=>e.preventDefault());
+  span.addEventListener("drop",e=>{
+    e.preventDefault();
+    if(dragItem && dragItem!==span) tagsBox.insertBefore(dragItem,span);
+    updateShortHidden();
+  });
+  tagsBox.appendChild(span);
+  shortInput.value="";
+  updateShortHidden();
+}
+
+function removeTagElement(el){
+  el.closest(".tag").remove();
+  updateShortHidden();
+}
+
+function updateShortHidden(){
+  const arr=[...tagsBox.querySelectorAll(".tag.blue")].map(t=>t.dataset.value);
+  shortHidden.value=arr.join(",");
+}
+
+
+/* =============================
+   固定時間
+============================= */
+const fixedList=document.getElementById("fixed-time-list");
+const fixedHidden=document.getElementById("fixed_times_hidden");
+
+function addFixedTime(){
+  const h=document.getElementById("fixed_h").value;
+  const m=document.getElementById("fixed_m").value;
+  const s=document.getElementById("fixed_s").value;
+  const t=`${h}:${m}:${s}`;
+
+  const exist=[...fixedList.querySelectorAll(".tag.orange")].map(x=>x.dataset.time);
+  if(exist.includes(t)) return;
+
+  const span=document.createElement("span");
+  span.className="tag orange";
+  span.dataset.time=t;
+  span.innerHTML=`${t} <span class="remove" onclick="removeFixedTag(this)">&times;</span>`;
+  fixedList.appendChild(span);
+  refreshFixedHidden();
+}
+
+function removeFixedTag(el){
+  el.closest(".tag").remove();
+  refreshFixedHidden();
+}
+
+function refreshFixedHidden(){
+  const arr=[...fixedList.querySelectorAll(".tag.orange")].map(x=>x.dataset.time);
+  fixedHidden.value=arr.join(",");
+}
+
+function copyFixedTimes(){
+  const arr=[...fixedList.querySelectorAll(".tag.orange")].map(x=>x.dataset.time);
+  if(arr.length===0){ alert("沒有可重複時間"); return; }
+
+  const t=arr[0];
+  const span=document.createElement("span");
+  span.className="tag orange";
+  span.dataset.time=t;
+  span.innerHTML=`${t} <span class="remove" onclick="removeFixedTag(this)">&times;</span>`;
+  fixedList.appendChild(span);
+  refreshFixedHidden();
+}
+
+function clearFixedTimes(){
+  if(confirm("確定全部移除？")){
+    fixedList.innerHTML="";
+    refreshFixedHidden();
+  }
+}
+
+
+/* =============================
+   圖片預覽
+============================= */
+function previewFile(input){
+  const file=input.files?.[0];
+  const img=document.getElementById("img_preview");
+  if(!file){ img.style.display="none"; return; }
+  img.src=URL.createObjectURL(file);
+  img.style.display="block";
+}
+
+
+/* =============================
+   類型切換
+============================= */
+function switchType(){
+  const v=document.querySelector('input[name="respawn_type"]:checked').value;
+  document.getElementById("fixed-section").style.display=(v==="fixed")?"block":"none";
+  document.getElementById("cycle-section").style.display=(v==="cycle")?"block":"none";
+}
+</script>
+
+</body>
+</html>

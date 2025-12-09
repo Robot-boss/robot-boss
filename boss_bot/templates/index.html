@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<title>Boss 管理面板</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+body {
+    background:#2f220f;
+    color:white;
+    font-family:"微軟正黑體";
+}
+.list {
+    margin-top:20px;
+}
+.item {
+    display:flex;
+    background:#3a2b17;
+    padding:12px;
+    border-radius:10px;
+    margin-bottom:12px;
+}
+.boss-img {
+    width:100px;
+    height:100px;
+    border-radius:8px;
+    object-fit:cover;
+    margin-right:15px;
+}
+.info {
+    flex:1;
+}
+.info-title {
+    font-size:20px;
+    font-weight:bold;
+}
+.shortnames .tag {
+    display:inline-block;
+    background:#ff9c2b;
+    padding:4px 8px;
+    border-radius:6px;
+    color:#000;
+    font-weight:bold;
+    margin-right:6px;
+    margin-top:6px;
+}
+.week-tags .wtag {
+    display:inline-block;
+    background:#f1e0c6;
+    padding:3px 8px;
+    border-radius:6px;
+    color:#000;
+    margin-right:6px;
+    margin-top:6px;
+    font-weight:bold;
+}
+.btn {
+    background:#1e6bff;
+    color:white;
+    padding:6px 12px;
+    border-radius:6px;
+    text-decoration:none;
+    margin-right:8px;
+}
+.btn-red {
+    background:#d9534f;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Boss 管理面板</h1>
+
+<!-- 匯出 -->
+<button class="btn" onclick="location.href='/export_bosses'">
+  匯出王表(JSON)
+</button>
+
+<!-- 匯入按鈕 -->
+<button class="btn" data-key="tw_m"  onclick="confirmLoadPreset(this)">載入台版天堂M</button>
+<button class="btn" data-key="tw_2m" onclick="confirmLoadPreset(this)">載入台版天堂2M</button>
+<button class="btn" data-key="w"     onclick="confirmLoadPreset(this)">載入天堂W</button>
+<button class="btn" data-key="default" onclick="confirmLoadPreset(this)">載入預設王表</button>
+
+<a href="/create" class="btn" style="float:right;margin-bottom:12px">＋ 新增王</a>
+<div style="clear:both"></div>
+
+<div class="list">
+
+{% set weekmap=['日','一','二','三','四','五','六'] %}
+
+{% for b in bosses %}
+<div class="item">
+
+    <!-- 圖片 -->
+    <img class="boss-img"
+         src="{{ url_for('static', filename='images/' ~ b.img) if b.img else url_for('static', filename='noimg.png') }}">
+
+    <div class="info">
+
+        <!-- 名稱 -->
+        <div class="info-title">{{ b.name }}</div>
+
+        <!-- 簡稱 -->
+        <div class="shortnames">
+            {% for t in b.shortname %}
+                <span class="tag">{{ t }}</span>
+            {% endfor %}
+        </div>
+
+        <!-- 星期 -->
+        <div class="week-tags">
+            {% if b.weekday %}
+                {% for w in b.weekday %}
+                    <span class="wtag">{{ weekmap[w|int] }}</span>
+                {% endfor %}
+            {% else %}
+                <span class="wtag">—</span>
+            {% endif %}
+        </div>
+
+<!-- 時間（週期 or 固定） -->
+<div style="margin-top:6px;">
+
+    {# ========== 週期首領 ========== #}
+    {% if b.respawn_type == "cycle" %}
+        {% set t = (b.respawn_period or "0:0:0").split(":") %}
+        {{ "%02d" % t[0]|int }}:{{ "%02d" % t[1]|int }}:{{ "%02d" % t[2]|int }}
+
+    {# ========== 固定首領 ========== #}
+    {% elif b.respawn_type == "fixed" %}
+
+        {# respawn_period 可能是：
+           ✔  "06:00:00"
+           ✔  ["06:00:00", "12:00:00", ...]
+           我們全部轉成 list 處理
+        #}
+
+        {% if b.respawn_period is string %}
+            {% set fixed_list = [b.respawn_period] %}
+        {% elif b.respawn_period is sequence %}
+            {% set fixed_list = b.respawn_period %}
+        {% else %}
+            {% set fixed_list = [] %}
+        {% endif %}
+
+        {# 無時間顯示 00:00:00 #}
+        {% if fixed_list|length == 0 %}
+            00:00:00
+        {% else %}
+            {% for t in fixed_list %}
+                <span class="wtag">{{ t }}</span>
+            {% endfor %}
+        {% endif %}
+
+    {% else %}
+        00:00:00
+    {% endif %}
+
+</div>
+
+        <!-- 功能 -->
+        <div style="margin-top:10px;">
+            <a class="btn" href="/edit/{{ loop.index0 }}?g={{ guild }}">編輯</a>
+            <a class="btn btn-red" href="/delete/{{ loop.index0 }}?g={{ guild }}"
+               onclick="return confirm('確定要刪除嗎？')">刪除</a>
+        </div>
+
+    </div>
+</div>
+{% endfor %}
+
+</div>
+
+<script>
+function confirmLoadPreset(btn){
+  const key = btn.getAttribute("data-key");
+  Swal.fire({
+    title:'載入預設王表？',
+    text:`載入：${key}，會覆蓋目前所有王表`,
+    icon:'warning',
+    showCancelButton:true,
+    confirmButtonText:'載入'
+  }).then(res=>{
+    if(res.isConfirmed){
+      fetch(`/import_preset/${key}`,{method:"POST"})
+      .then(r=>r.json())
+      .then(d=>{
+        Swal.fire('完成', d.message, 'success')
+        .then(()=>location.reload());
+      });
+    }
+  });
+}
+</script>
+
+</body>
+</html>
