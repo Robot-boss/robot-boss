@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<title>編輯：{{ boss.name }}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+/* 整體黑灰主題（保留你要的外觀） */
+body{background:#2f2b28;color:#eee;font-family:"微軟正黑體",Arial;margin:0;padding:18px}
+.container{max-width:1100px;margin:0 auto}
+.form-wrap{background:#312416;padding:20px;border-radius:8px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,0.4)}
+h2{color:#fff;margin:0 0 14px}
+
+/* 表單元件 */
+label{display:block;margin:12px 0 6px;font-weight:600;color:#f3e6d7}
+input[type="text"], textarea, select {width:100%;padding:10px;border-radius:6px;border:1px solid #594330;background:#fff;color:#000}
+textarea{min-height:90px;resize:vertical}
+
+/* 簡稱 tags */
+.tags-box{min-height:46px;padding:8px;background:#2f220f;border:1px dashed #6b4b2a;color:#fff;border-radius:6px}
+.tag{display:inline-flex;align-items:center;background:#ff9c2b;color:#000;padding:6px 10px;border-radius:6px;margin:4px;font-weight:700;cursor:move}
+.tag .x{margin-left:8px;background:transparent;border:none;cursor:pointer;font-weight:800}
+
+/* 星期的按鈕排版（像圖2） */
+.weekline{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.weekline label{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#3a2b17;border-radius:6px;border:1px solid #594330;color:#f3e6d7;cursor:pointer}
+
+/* 時間 tag（固定首領） */
+.time-tag{display:inline-block;background:#ff9c2b;padding:6px 10px;border-radius:6px;margin:6px;color:#000;font-weight:700}
+.time-tag button{margin-left:8px;border:none;background:transparent;cursor:pointer;font-weight:700}
+
+/* 按鈕 */
+.btn{display:inline-block;padding:8px 12px;border-radius:6px;background:#e67e22;color:#fff;text-decoration:none;cursor:pointer;border:0;font-weight:700}
+.btn.blue{background:#1e6bff}
+.btn.red{background:#d9534f}
+.btn.gray{background:#6b6b6b}
+.btn.small{padding:6px 10px}
+
+/* 區塊間距 */
+.row{margin-bottom:10px}
+
+/* 新增時間彈窗（下拉三段式） */
+#time-dialog-backdrop{position:fixed;left:0;top:0;width:100%;height:100%;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,0.6);z-index:9999}
+#time-dialog{background:#f9f1e0;padding:18px;border-radius:10px;width:320px;color:#000;box-shadow:0 6px 20px rgba(0,0,0,0.5);text-align:center}
+#time-dialog select{padding:8px;border-radius:6px;margin:6px 4px;font-size:16px}
+
+/* 小螢幕適配 */
+@media(max-width:700px){
+  .container{padding:12px}
+  #time-dialog{width:92%}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="form-wrap">
+    <h2>編輯：{{ boss.name }}</h2>
+
+    <form method="POST" enctype="multipart/form-data" onsubmit="syncFixedHidden(); updateShortHidden()">
+
+      <!-- 王名 -->
+      <div class="row">
+        <label>正式王名：</label>
+        <input type="text" name="name" value="{{ boss.name }}" required>
+      </div>
+
+      <!-- 補充說明 -->
+      <div class="row">
+        <label>補充說明：</label>
+        <textarea name="desc">{{ boss.desc }}</textarea>
+      </div>
+
+      <!-- 簡稱（tag） -->
+      <div class="row">
+        <label>簡稱（Enter 或＋加入，可拖曳排序）：</label>
+        <div id="tags_box" class="tags-box"></div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <input id="shortname_input" type="text" placeholder="輸入簡稱按 Enter 或 +">
+          <button type="button" class="btn small" onclick="addTagFromInput()">＋</button>
+        </div>
+        <input type="hidden" name="shortname" id="shortname_hidden">
+      </div>
+
+      <!-- 重生星期 -->
+      <div class="row">
+        <label>重生星期：</label>
+        <div class="weekline">
+          {% for day in ['日','一','二','三','四','五','六'] %}
+            {% set idx = loop.index0 %}
+            <label>
+              <input type="checkbox" name="weekday" value="{{ idx }}" {% if idx|string in boss.weekday %}checked{% endif %}>
+              {{ day }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- 首領類型 -->
+      <div class="row">
+        <label>首領類型：</label>
+        <select name="respawn_type" id="respawn_type">
+          <option value="cycle" {% if boss.respawn_type == 'cycle' %}selected{% endif %}>週期首領</option>
+          <option value="fixed" {% if boss.respawn_type == 'fixed' %}selected{% endif %}>固定首領</option>
+        </select>
+      </div>
+
+      <!-- 週期（只在選 cycle 時顯示） -->
+      <div id="cycle-section" class="row" style="display:none">
+        <label>重生週期（時｜分｜秒）：</label>
+        <div class="hms">
+          <select name="respawn_h">
+            {% for i in range(0,24) %}
+              <option value="{{ i }}" {% if i==respawn_h %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
+            {% endfor %}
+          </select> :
+          <select name="respawn_m">
+            {% for i in range(0,60) %}
+              <option value="{{ i }}" {% if i==respawn_m %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
+            {% endfor %}
+          </select> :
+          <select name="respawn_s">
+            {% for i in range(0,60) %}
+              <option value="{{ i }}" {% if i==respawn_s %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- 固定（只在選 fixed 時顯示） -->
+      <div id="fixed-section" class="row" style="display:none">
+        <label>固定重生時間</label>
+
+        <!-- 左上三個操作 -->
+        <div style="margin:8px 0; display:flex; gap:8px; flex-wrap:wrap">
+          <button type="button" id="open-time-dialog" class="btn">⏰ 增加時間</button>
+          <button type="button" id="preset-add" class="btn blue">快速預設</button>
+          <button type="button" id="copy-time" class="btn small">🔁 重複設定（排序）</button>
+          <button type="button" id="clear-time" class="btn red">🗑 全部移除</button>
+        </div>
+
+        <!-- 快速預設面板（預設常用時段按鈕） -->
+        <div id="preset-panel" style="margin-bottom:10px; display:none">
+          <!-- 你可以編輯下面的按鈕時段 -->
+          <button type="button" class="btn small preset-btn" data-time="01:00:00">01:00</button>
+          <button type="button" class="btn small preset-btn" data-time="03:00:00">03:00</button>
+          <button type="button" class="btn small preset-btn" data-time="05:00:00">05:00</button>
+          <button type="button" class="btn small preset-btn" data-time="07:00:00">07:00</button>
+          <button type="button" class="btn small preset-btn" data-time="09:00:00">09:00</button>
+          <button type="button" class="btn small preset-btn" data-time="11:00:00">11:00</button>
+          <button type="button" class="btn small preset-btn" data-time="13:00:00">13:00</button>
+          <button type="button" class="btn small preset-btn" data-time="15:00:00">15:00</button>
+          <button type="button" class="btn small preset-btn" data-time="17:00:00">17:00</button>
+          <button type="button" class="btn small preset-btn" data-time="19:00:00">19:00</button>
+          <button type="button" class="btn small preset-btn" data-time="21:00:00">21:00</button>
+          <button type="button" class="btn small preset-btn" data-time="23:00:00">23:00</button>
+        </div>
+
+<!-- 時間列表 -->
+<div id="fixed-time-list" style="margin-top:8px; min-height:48px">
+  <!-- 如果 boss.respawn_period 是 list，先渲染現有時間 -->
+  {% if boss.respawn_type == 'fixed' %}
+    {% if boss.respawn_period is sequence %}
+      {% for t in boss.respawn_period %}
+        <span class="time-tag" data-time="{{ t }}">{{ t }} <button type="button" class="remove-time">x</button></span>
+      {% endfor %}
+    {% elif boss.respawn_period is string %}
+      <span class="time-tag" data-time="{{ boss.respawn_period }}">{{ boss.respawn_period }} <button type="button" class="remove-time">x</button></span>
+    {% endif %}
+  {% endif %}
+</div>
+
+        <!-- 隱藏欄位：送出時用逗號分隔 -->
+        <input type="hidden" id="fixed_times_hidden" name="fixed_times" value="{% if boss.respawn_type=='fixed' and boss.respawn_period is sequence %}{{ boss.respawn_period | join(',') }}{% elif boss.respawn_type=='fixed' and boss.respawn_period is string %}{{ boss.respawn_period }}{% else %}{% endif %}">
+      </div>
+
+      <!-- 圖片 -->
+      <div class="row">
+        <label>目前圖片：</label>
+        {% if boss.img %}
+          <img src="{{ boss.img }}" style="max-height:140px;display:block;margin-bottom:8px">
+        {% endif %}
+        <label>上傳新圖片（會取代舊圖）：</label>
+        <input type="file" name="img_upload" accept="image/*" onchange="previewFile(this)">
+        <input type="text" name="img" value="{{ boss.img }}" placeholder="或貼上圖片網址 (http...)">
+        <img id="img_preview" style="display:none;max-height:140px;margin-top:8px">
+      </div>
+
+      <!-- 操作按鈕 -->
+      <div style="margin-top:16px; display:flex; gap:12px;">
+        <button class="btn" type="submit">儲存</button>
+        <button type="button" class="btn gray" onclick="window.history.back()">取消</button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<!-- 新增時間彈窗（下拉三段式） -->
+<div id="time-dialog-backdrop">
+  <div id="time-dialog">
+    <h3>新增固定時間</h3>
+    <div style="margin-top:12px;">
+      <select id="sel-h"></select> :
+      <select id="sel-m"></select> :
+      <select id="sel-s"></select>
+    </div>
+    <div style="margin-top:14px;">
+      <button id="time-ok" class="btn">確定</button>
+      <button id="time-cancel" class="btn gray">關閉</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- 圖片預覽 ---------- */
+function previewFile(input){
+  const file = input.files?.[0];
+  const img = document.getElementById('img_preview');
+  if(!file){ img.style.display='none'; return; }
+  img.src = URL.createObjectURL(file);
+  img.style.display='block';
+}
+
+/* ---------- TAG（簡稱）系統 ---------- */
+const tagsBox = document.getElementById("tags_box");
+const shortInput = document.getElementById("shortname_input");
+const shortHidden = document.getElementById("shortname_hidden");
+let dragItem = null;
+
+shortInput.addEventListener("keydown", e => {
+  if(e.key === "Enter"){ e.preventDefault(); addTagFromInput(); }
+});
+
+function addTagFromInput(){
+  const v = shortInput.value.trim();
+  if(!v) return;
+  const parts = v.split(/[\s,]+/);
+  const exist = new Set([...tagsBox.querySelectorAll(".tag")].map(t => t.dataset.value));
+  parts.forEach(p=>{
+    const word = p.trim();
+    if(!word) return;
+    if(exist.has(word)) return;
+    const span = document.createElement("span");
+    span.className = "tag";
+    span.dataset.value = word;
+    span.innerHTML = word + ' <button class="x" type="button" onclick="removeTag(this)">×</button>';
+    span.draggable = true;
+    span.addEventListener("dragstart", ()=>dragItem = span);
+    span.addEventListener("dragover", e=>e.preventDefault());
+    span.addEventListener("drop", e=>{
+      e.preventDefault();
+      if(dragItem && dragItem !== span) tagsBox.insertBefore(dragItem, span);
+      updateShortHidden();
+    });
+    tagsBox.appendChild(span);
+    exist.add(word);
+  });
+  shortInput.value = "";
+  updateShortHidden();
+}
+
+function removeTag(el){
+  el.closest(".tag").remove();
+  updateShortHidden();
+}
+
+function updateShortHidden(){
+  const arr = [...tagsBox.querySelectorAll(".tag")].map(t => t.dataset.value);
+  shortHidden.value = arr.join(",");
+}
+
+/* 初始化 tags（從 boss.shortname） */
+document.addEventListener("DOMContentLoaded", ()=>{
+  try{
+    const raw = {{ boss.shortname | tojson }};
+    raw.forEach(w=>{
+      const span = document.createElement("span");
+      span.className = "tag";
+      span.dataset.value = w;
+      span.innerHTML = w + ' <button class="x" type="button" onclick="removeTag(this)">×</button>';
+      span.draggable = true;
+      span.addEventListener("dragstart", ()=>dragItem = span);
+      span.addEventListener("dragover", e=>e.preventDefault());
+      span.addEventListener("drop", e=>{
+        e.preventDefault();
+        if(dragItem && dragItem !== span) tagsBox.insertBefore(dragItem, span);
+        updateShortHidden();
+      });
+      tagsBox.appendChild(span);
+    });
+    updateShortHidden();
+  }catch(e){
+    console.warn("init tags failed", e);
+  }
+});
+
+/* ---------- 固定 / 週期 切換顯示 ---------- */
+function updateSections(){
+  const type = document.getElementById("respawn_type").value;
+  document.getElementById("cycle-section").style.display = (type === "cycle") ? "block" : "none";
+  document.getElementById("fixed-section").style.display = (type === "fixed") ? "block" : "none";
+}
+document.getElementById("respawn_type").addEventListener("change", updateSections);
+document.addEventListener("DOMContentLoaded", updateSections);
+
+/* ---------- 固定時間列表操作 ---------- */
+const fixedList = document.getElementById("fixed-time-list");
+const fixedHidden = document.getElementById("fixed_times_hidden");
+
+/* 同步隱藏欄位（在送出前呼叫） */
+function syncFixedHidden(){
+  const arr = [...fixedList.querySelectorAll(".time-tag")].map(t => t.dataset.time);
+  fixedHidden.value = arr.join(",");
+}
+
+/* 在頁面先綁定 X 按鈕（移除）與整理 dataset（若用 server render） */
+document.addEventListener("click", function(e){
+  if(e.target && e.target.classList && e.target.classList.contains("remove-time")){
+    const parent = e.target.closest(".time-tag");
+    if(parent) parent.remove();
+    syncFixedHidden();
+  }
+});
+
+/* 去重、排序 (HH:MM:SS) - 用於重複設定按鈕 */
+function normalizeTimes(arr){
+  // 保證格式 HH:MM:SS 並排序
+  const fixed = arr.map(t=>{
+    if(typeof t!=='string') return null;
+    let part = t.trim();
+    if(part.length===5) part = part + ':00';
+    return part.padStart(8,'0');
+  }).filter(Boolean);
+  // 篩掉非法格式
+  const ok = fixed.filter(t=>/^\d{2}:\d{2}:\d{2}$/.test(t));
+  ok.sort();
+  // 去重
+  return [...new Set(ok)];
+}
+
+/* 重複設定（排序並重新渲染） */
+document.getElementById("copy-time").addEventListener("click", ()=>{
+  const arr = [...fixedList.querySelectorAll(".time-tag")].map(t=>t.dataset.time);
+  if(arr.length===0){ alert("目前沒有任何時間可以排序。"); return; }
+  const res = normalizeTimes(arr);
+  fixedList.innerHTML = "";
+  res.forEach(t=>{
+    const span = document.createElement("span");
+    span.className = "time-tag";
+    span.dataset.time = t;
+    span.innerHTML = `${t} <button type="button" class="remove-time">x</button>`;
+    fixedList.appendChild(span);
+  });
+  syncFixedHidden();
+});
+
+/* 全部移除 */
+document.getElementById("clear-time").addEventListener("click", ()=>{
+  if(!confirm("確定全部移除？")) return;
+  fixedList.innerHTML = "";
+  syncFixedHidden();
+});
+
+/* 預設按鈕面板 toggle */
+document.getElementById("preset-add").addEventListener("click", ()=>{
+  const panel = document.getElementById("preset-panel");
+  panel.style.display = (panel.style.display==='none' || panel.style.display==='') ? 'block' : 'none';
+});
+
+/* 快速預設按鈕加入 */
+document.querySelectorAll(".preset-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const t = btn.dataset.time;
+    addTimeTagIfNotExist(t);
+  });
+});
+
+/* 新增時間：若不存在則加入並同步 */
+function addTimeTagIfNotExist(t){
+  // 將 0:0:0 或 00:00:00 轉成 HH:MM:SS
+  let time = t.trim();
+  if(time.length === 5) time = time + ":00";
+  // 統一補兩位
+  const parts = time.split(":").map(x => x.padStart(2,'0'));
+  if(parts.length !== 3) return;
+  const norm = `${parts[0]}:${parts[1]}:${parts[2]}`;
+  // 如果已存在就跳過
+  const exist = [...fixedList.querySelectorAll(".time-tag")].some(e => e.dataset.time === norm);
+  if(exist) return;
+  const span = document.createElement("span");
+  span.className = "time-tag";
+  span.dataset.time = norm;
+  span.innerHTML = `${norm} <button type="button" class="remove-time">x</button>`;
+  fixedList.appendChild(span);
+  syncFixedHidden();
+}
+
+/* ---------- 下拉三段式彈窗（增加時間） ---------- */
+const backdrop = document.getElementById("time-dialog-backdrop");
+const selH = document.getElementById("sel-h");
+const selM = document.getElementById("sel-m");
+const selS = document.getElementById("sel-s");
+for(let i=0;i<24;i++) selH.innerHTML += `<option value="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</option>`;
+for(let i=0;i<60;i++){ selM.innerHTML += `<option value="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</option>`; selS.innerHTML += `<option value="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</option>`; }
+
+document.getElementById("open-time-dialog").addEventListener("click", ()=>{
+  backdrop.style.display = "flex";
+});
+document.getElementById("time-cancel").addEventListener("click", ()=>backdrop.style.display='none');
+document.getElementById("time-ok").addEventListener("click", ()=>{
+  const h = selH.value;
+  const m = selM.value;
+  const s = selS.value;
+  const t = `${h}:${m}:${s}`;
+  addTimeTagIfNotExist(t);
+  backdrop.style.display = 'none';
+});
+
+/* ---------- submit 前確保 fixed hidden 有值 ---------- */
+document.querySelector('form').addEventListener('submit', ()=>{
+  syncFixedHidden();
+  updateShortHidden();
+});
+
+/* ---------- 頁面一開始（可能 server 已渲染了 time-tag），補上 dataset/time 並同步 hidden ---------- */
+document.addEventListener("DOMContentLoaded", ()=>{
+  // 有些 server render 的 .time-tag 只有文字，補 dataset.time
+  [...fixedList.querySelectorAll(".time-tag")].forEach(el=>{
+    if(!el.dataset.time){
+      const txt = el.textContent.trim().replace('x','').trim();
+      el.dataset.time = txt.length===5? txt+':00' : txt;
+    }
+  });
+  syncFixedHidden();
+
+  // 若頁面載入時有固定時間但 respawn_type 是 fixed，顯示 fixed 區塊
+  updateSections();
+});
+</script>
+</body>
+</html>

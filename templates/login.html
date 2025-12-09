@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>後台登入</title>
+
+<style>
+body{
+    background:#2d1a0c;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    margin:0;
+    color:white;
+    font-family:"Microsoft JhengHei";
+}
+
+.wrap{
+    text-align:center;
+}
+
+input{
+    width:320px;
+    height:45px;
+    border:none;
+    border-radius:5px;
+    font-size:18px;
+    padding:0 10px;
+}
+
+button{
+    width:160px;
+    height:45px;
+    border:none;
+    border-radius:5px;
+    background:#f0a000;
+    color:white;
+    font-size:18px;
+    margin-top:15px;
+    cursor:pointer;
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+    <h2>請輸入頻道密碼</h2>
+
+    <form method="POST">
+        <input type="password" name="pw" placeholder="請輸入密碼"><br>
+
+        <button>登入</button>
+    </form>
+
+    {% if error %}
+      <p style="color:red; margin-top:10px">{{ error }}</p>
+    {% endif %}
+</div>
+
+</body>
+</html>
