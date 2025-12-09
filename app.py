@@ -1,20 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
-import os
-import json
-from datetime import datetime, date, time as dt_time
+import os, json
+from datetime import datetime
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder='static')
-
-# =================
-# 後台密碼 session key
-# =================
 app.secret_key = os.environ.get("APP_SECRET", "super-secret-key")  # 自己換字串更安全
 
 
-# =================
-# session 保護 decorator
-# =================
 def login_required(fn):
     def wrapper(*args, **kwargs):
         if not session.get("logged_in"):
@@ -27,61 +19,52 @@ def login_required(fn):
 DATA_DIR = "data/guild_default"
 BOSS_FILE = os.path.join(DATA_DIR, "bosses.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
-
 IMG_DIR = "static/images"
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(IMG_DIR, exist_ok=True)
 
 
-# -----------------------------
-# JSON 存取
-# -----------------------------
 def load_bosses():
     if not os.path.exists(BOSS_FILE):
         return []
-    with open(BOSS_FILE, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except:
-            return []
+    try:
+        return json.load(open(BOSS_FILE, "r", encoding="utf-8"))
+    except:
+        return []
 
 
 def save_bosses(data):
-    with open(BOSS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    json.dump(data, open(BOSS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 
 
 def load_settings():
-    if os.path.exists(SETTINGS_FILE):
-        return json.load(open(SETTINGS_FILE, "r", encoding="utf-8"))
-    return { "admin_pw": "0000" }
+    if not os.path.exists(SETTINGS_FILE):
+        return {"admin_pw": "0000"}
+    return json.load(open(SETTINGS_FILE, "r", encoding="utf-8"))
 
 
 def save_settings(s):
     json.dump(s, open(SETTINGS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 
 
-# -----------------------------
-# 登入頁
-# -----------------------------
+# =======================
+#   ★★ 後台登入 ★★
+# =======================
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    error = None
     if request.method == "POST":
         pw = request.form.get("pw")
         settings = load_settings()
+
         if pw == settings.get("admin_pw"):
             session["logged_in"] = True
             return redirect("/")
-        return "密碼錯誤", 403
+        else:
+            error = "密碼錯誤"
 
-    return """
-    <h2>後台登入</h2>
-    <form method='POST'>
-      <input name='pw' placeholder='請輸入密碼'>
-      <button>登入</button>
-    </form>
-    """
+    return render_template("login.html", error=error)
 
 
 @app.route("/logout")
